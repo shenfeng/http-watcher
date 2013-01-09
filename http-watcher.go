@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -326,45 +324,9 @@ func compilePattens() {
 	reloadCfg.ignorePattens = pattens
 }
 
-func notifyBrowsers() {
-	reloadCfg.mu.Lock()
-	defer reloadCfg.mu.Unlock()
-	for _, c := range reloadCfg.clients {
-		defer c.conn.Close()
-		reload := "HTTP/1.1 200 OK\r\n"
-		reload += "Cache-Control: no-cache\r\nContent-Type: text/javascript\r\n\r\n"
-		reload += "location.reload(true);"
-		c.buf.Write([]byte(reload))
-		c.buf.Flush()
-	}
-	reloadCfg.clients = make([]Client, 0)
-}
 
-func processFsEvents() {
-	for {
-		events := <-reloadCfg.eventsCh
-		command := reloadCfg.command
-		if command != "" {
-			args := make([]string, len(events)*2)
-			for i, e := range events {
-				args[2*i] = e.Event
-				args[2*i+1] = e.File
-			}
-			sub := exec.Command(command, args...)
-			var out bytes.Buffer
-			sub.Stdout = &out
-			err := sub.Run()
-			if err == nil {
-				log.Println("run "+command+" ok; output: ", out.String())
-				notifyBrowsers()
-			} else {
-				log.Println("ERROR running "+command, err)
-			}
-		} else {
-			notifyBrowsers()
-		}
-	}
-}
+
+
 
 func main() {
 	flag.IntVar(&(reloadCfg.port), "port", 8000, "Which port to listen")
@@ -394,8 +356,9 @@ func main() {
 	if e := os.Chdir(reloadCfg.root); e != nil {
 		log.Panic(e)
 	}
-	go startMonitorFs()
-	go processFsEvents()
+	// go startMonitorFs()
+	go startFsMonitor()
+	//go processFsEvents()
 
 	http.HandleFunc("/", handler)
 
