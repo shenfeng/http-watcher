@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/howeyc/fsnotify"
 	"io"
 	"log"
 	"mime"
@@ -21,6 +20,9 @@ import (
 	"sync"
 	"text/template"
 	"time"
+
+	"code.google.com/p/go.net/websocket"
+	"github.com/howeyc/fsnotify"
 )
 
 type Client struct {
@@ -39,6 +41,7 @@ type ReloadMux struct {
 	dirListTmpl   *template.Template
 	docTmpl       *template.Template
 	clients       []Client
+	wsclients     []*websocket.Conn
 	private       bool
 	proxy         int
 	monitor       bool
@@ -287,6 +290,17 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func wshandler(ws *websocket.Conn) {
+	reloadCfg.mu.Lock()
+	reloadCfg.wsclients = append(reloadCfg.wsclients, ws)
+	reloadCfg.mu.Unlock()
+
+	// Wait until the client disconnects. 
+	// We're not expecting the client to send real data to us 
+	// so websocket.Read() can be used as a convenient way to block
+	ws.Read(nil)
+}
+
 func startMonitorFs() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -346,6 +360,13 @@ func notifyBrowsers() {
 		c.buf.Flush()
 	}
 	reloadCfg.clients = make([]Client, 0)
+
+	for _, c := range reloadCfg.wsclients {
+		defer c.Close()
+		reload := fmt.Sprintf("%f*1000", reloadCfg.delay)
+		c.Write([]byte(reload))
+	}
+	reloadCfg.wsclients = make([]*websocket.Conn, 0)
 }
 
 // remove duplicate, and file name contains #
@@ -455,6 +476,7 @@ func main() {
 		go processFsEvents()
 	}
 	http.HandleFunc("/", handler)
+	http.Handle("/ws", websocket.Handler(wshandler))
 
 	int := ":" + strconv.Itoa(reloadCfg.port)
 	p := strconv.Itoa(reloadCfg.port)

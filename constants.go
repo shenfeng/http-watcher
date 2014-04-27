@@ -5,25 +5,47 @@ const (
 	ADD       = "ADD"
 	REMOVE    = "REMOVE"
 	RELOAD_JS = `(function () {
-  var added = false;
-  function add_js () {
-    if(added) { return; }
-    var js = document.createElement('script');
-    js.src = "http://{{.}}/_d/polling";
-    var scripts = document.getElementsByTagName('script'),
-        s = scripts[scripts.length - 1];
-    s.parentNode.insertBefore(js, s);
-    if(window.console && console.log) {
-      console.log("http-watcher reload connected");
-    }
-    added = true;
-  }
+		var added = false;
+		function add_js () {
+			if(added) { return; }
 
-	setTimeout(function(){
-  	setTimeout(add_js, 600);
-  	window.onload = add_js;
-	}, 600)
-})();`
+			if (window.WebSocket){
+				var sock = null;
+				var wsuri = "ws://{{.}}/ws";
+
+				sock = new WebSocket(wsuri);
+
+				sock.onopen = function() {
+					console.log("http-watcher reload connected, websocket");
+				}
+				sock.onclose = function() {
+					console.log("http-watcher reload disconnected, websocket");
+				}
+
+				sock.onmessage = function(e) {
+					setTimeout(function() {
+						location.reload(true);
+					}, parseFloat(e.data));
+				}
+			} else {
+				var js = document.createElement('script');
+				js.src = "http://{{.}}/_d/polling";
+				var scripts = document.getElementsByTagName('script'),
+				s = scripts[scripts.length - 1];
+				s.parentNode.insertBefore(js, s);
+				if(window.console && console.log) {
+					console.log("http-watcher reload connected");
+				}
+			}
+			added = true;
+		}
+
+		setTimeout(function(){
+			setTimeout(add_js, 600);
+			window.onload = add_js;
+		}, 600)
+	})();`
+
 	DIR_HTML = `<!doctype html>
 <html>
   <head>
