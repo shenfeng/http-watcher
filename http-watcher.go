@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/howeyc/fsnotify"
 	"io"
 	"log"
 	"mime"
@@ -21,6 +20,8 @@ import (
 	"sync"
 	"text/template"
 	"time"
+
+	"github.com/howeyc/fsnotify"
 )
 
 type Client struct {
@@ -232,6 +233,9 @@ func fileHandler(w http.ResponseWriter, path string, req *http.Request) {
 				ctype = ctype[0:idx]
 			}
 			w.Header().Set("Content-Type", ctype)
+		}
+		if fi, err := os.Stat(path); err == nil {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
 		}
 		w.WriteHeader(200)
 		io.Copy(w, f)
