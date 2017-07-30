@@ -27,6 +27,7 @@ http-watcher args  # acceptable args list below, -h to show them
   -private=false: Only listen on lookback interface, otherwise listen on all interface
   -proxy=0: Local dynamic site's port number, like 8080, HTTP watcher proxy it, automatically reload browsers when watched directory's file changed
   -root=".": Watched root directory for filesystem events, also the HTTP File Server's root directory
+  -open=true: Open your default browser to the serving url
 ```
 
 ### HTML + JS + CSS (static web project)

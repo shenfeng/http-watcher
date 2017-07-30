@@ -21,7 +21,9 @@ import (
 	"text/template"
 	"time"
 
+	fqdn "github.com/ShowMax/go-fqdn"
 	"github.com/howeyc/fsnotify"
+	"github.com/skratchdot/open-golang/open"
 )
 
 type Client struct {
@@ -34,6 +36,7 @@ type ReloadMux struct {
 	port          int
 	ignores       string
 	ignorePattens []*regexp.Regexp
+	openBrowser   bool
 	command       string
 	root          string
 	reloadJs      *template.Template
@@ -86,6 +89,7 @@ func showDoc(w http.ResponseWriter, req *http.Request, err error) {
 
 func publicHosts() []string {
 	ips := make([]string, 0)
+	ips = append(ips, baseURL)
 	if reloadCfg.private {
 		ips = append(ips, "127.0.0.1:"+strconv.Itoa(reloadCfg.port))
 	} else {
@@ -233,9 +237,6 @@ func fileHandler(w http.ResponseWriter, path string, req *http.Request) {
 				ctype = ctype[0:idx]
 			}
 			w.Header().Set("Content-Type", ctype)
-		}
-		if fi, err := os.Stat(path); err == nil {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
 		}
 		w.WriteHeader(200)
 		io.Copy(w, f)
@@ -424,6 +425,8 @@ func processFsEvents() {
 	}
 }
 
+var baseURL string
+
 func main() {
 	flag.IntVar(&(reloadCfg.port), "port", 8000, "Which port to listen")
 	flag.StringVar(&(reloadCfg.root), "root", ".", "Watched root directory for filesystem events, also the HTTP File Server's root directory")
@@ -433,6 +436,7 @@ func main() {
 	flag.IntVar(&(reloadCfg.proxy), "proxy", 0, "Local dynamic site's port number, like 8080, HTTP watcher proxy it, automatically reload browsers when watched directory's file changed")
 	flag.BoolVar(&(reloadCfg.monitor), "monitor", true, "Enable monitor filesystem event")
 	flag.Float64Var(&(reloadCfg.delay), "delay", 0, "Delay in seconds before reload browser.")
+	flag.BoolVar(&(reloadCfg.openBrowser), "open", true, "open browser on start")
 	flag.Parse()
 
 	if _, e := os.Open(reloadCfg.command); e == nil {
@@ -462,18 +466,34 @@ func main() {
 
 	int := ":" + strconv.Itoa(reloadCfg.port)
 	p := strconv.Itoa(reloadCfg.port)
+
+	baseURL = fqdn.Get() + ":" + p
+
 	mesg := ""
 	if reloadCfg.proxy != 0 {
 		mesg += "; proxy site http://127.0.0.1:" + strconv.Itoa(reloadCfg.proxy)
 	}
-	mesg += "; please visit http://127.0.0.1:" + p
+	mesg += "; please visit http://" + baseURL
 	if reloadCfg.private {
 		int = "localhost" + int
 		log.Printf("listens on 127.0.0.1@" + p + mesg)
 	} else {
 		log.Printf("listens on 0.0.0.0@" + p + mesg)
 	}
-	if err := http.ListenAndServe(int, nil); err != nil {
-		log.Fatal(err)
+
+	q := make(chan bool)
+	go func(q chan bool) {
+		if err := http.ListenAndServe(int, nil); err != nil {
+			log.Fatal(err)
+		}
+		q <- true
+	}(q)
+
+	if reloadCfg.openBrowser == true {
+		time.Sleep(time.Millisecond * 500) // Give a chance to http Server to start
+		log.Printf("opening http://%s with system browser", baseURL)
+		open.Start("http://" + baseURL)
 	}
+
+	<-q
 }
