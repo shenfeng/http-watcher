@@ -235,14 +235,13 @@ func fileHandler(w http.ResponseWriter, path string, req *http.Request) {
 			w.Header().Set("Content-Type", ctype)
 		}
 		// text/html has larger size after appendReloadHook
-		if !strings.HasPrefix(ctype, "text/html") {
-			if fi, err := os.Stat(path); err == nil {
-				w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
-			}
+		if strings.HasPrefix(ctype, "text/html") {
+			w.WriteHeader(200)
+			io.Copy(w, f)
+			appendReloadHook(w, ctype, req)
+			return
 		}
-		w.WriteHeader(200)
-		io.Copy(w, f)
-		appendReloadHook(w, ctype, req)
+		http.ServeFile(w, req, path)
 	}
 }
 
